@@ -21,6 +21,8 @@ import {
   UserCircleIcon,
 } from "../icons/index";
 import SidebarWidget from "./SidebarWidget";
+import { fetchCurrentUser } from "@/components/auth/authApi";
+import { fetchUserProfile } from "@/components/user-profile/userProfileApi";
 
 type NavItem = {
   key: string;
@@ -113,6 +115,7 @@ const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const pathname = usePathname();
   const t = useTranslations("sidebar");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   const renderMenuItems = (
     navItems: NavItem[],
@@ -314,6 +317,29 @@ const AppSidebar: React.FC = () => {
     }
   }, [openSubmenu]);
 
+   useEffect(() => {
+        let active = true;
+    
+        fetchCurrentUser()
+          .then((user) => fetchUserProfile(user.id))
+          .then((profile) => {
+            if (active) {
+              setAvatarUrl(profile?.company?.logoUrl || null);
+            
+            }
+          })
+          .catch(() => {
+            if (active) {
+              setAvatarUrl(null);
+            
+            }
+          });
+    
+        return () => {
+          active = false;
+        };
+      }, []);
+
   const handleSubmenuToggle = (
     index: number,
     menuType: "main" | "support" | "others",
@@ -352,7 +378,7 @@ const AppSidebar: React.FC = () => {
             <>
               <Image
                 className="dark:hidden"
-                src="/images/logo/logo.svg"
+                src={avatarUrl || "/images/logo/logo.svg"}
                 alt="Logo"
                 width={150}
                 height={40}
@@ -361,7 +387,7 @@ const AppSidebar: React.FC = () => {
               />
               <Image
                 className="hidden dark:block"
-                src="/images/logo/logo-dark.svg"
+                src={avatarUrl || "/images/logo/logo-dark.svg"}
                 alt="Logo"
                 width={150}
                 height={40}
@@ -426,3 +452,7 @@ const AppSidebar: React.FC = () => {
 };
 
 export default AppSidebar;
+function setAvatarUrl(arg0: string | null) {
+  throw new Error("Function not implemented.");
+}
+

@@ -10,14 +10,16 @@ import { cn } from "@/utils";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+import { fetchCurrentUser } from "@/components/auth/authApi";
+import { fetchUserProfile } from "@/components/user-profile/userProfileApi";
 
 const AppHeader: React.FC = () => {
   const t = useTranslations("header");
   const inputRef = useRef<HTMLInputElement>(null);
   const [isApplicationMenuOpen, setApplicationMenuOpen] = useState(false);
-
   const { isMobileOpen, toggleSidebar, toggleMobileSidebar } = useSidebar();
-
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  
   const handleToggle = () => {
     if (window.innerWidth >= 1280) {
       toggleSidebar();
@@ -44,6 +46,29 @@ const AppHeader: React.FC = () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
+
+   useEffect(() => {
+      let active = true;
+  
+      fetchCurrentUser()
+        .then((user) => fetchUserProfile(user.id))
+        .then((profile) => {
+          if (active) {
+            setAvatarUrl(profile?.company?.logoUrl || null);
+          
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setAvatarUrl(null);
+          
+          }
+        });
+  
+      return () => {
+        active = false;
+      };
+    }, []);
 
   return (
     <header className="sticky top-0 z-99999 flex w-full border-gray-200 bg-white xl:border-b dark:border-gray-800 dark:bg-gray-900">
@@ -96,14 +121,14 @@ const AppHeader: React.FC = () => {
               width={154}
               height={32}
               className="dark:hidden"
-              src="/images/logo/logo.svg"
+              src={avatarUrl || "/images/logo/logo.svg"}
               alt="Logo"
             />
             <Image
               width={154}
               height={32}
               className="hidden dark:block"
-              src="/images/logo/logo-dark.svg"
+              src={avatarUrl || "/images/logo/logo-dark.svg"}
               alt="Logo"
             />
           </Link>
