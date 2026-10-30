@@ -1,0 +1,30 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "MainApplication",
+            "request": "launch",
+            "mainClass": "com.ai.rag.MainApplication",
+            "projectName": "app",
+            "envFile": "${workspaceFolder}/app/.env"
+        },
+        {
+            "type": "java",
+            "name": "RagApplication",
+            "request": "launch",
+            "mainClass": "com.ai.rag.RagApplication",
+            "projectName": "app",
+            "envFile": "${workspaceFolder}/app/.env"
+        },
+        {
+            "type": "java",
+            "name": "Spring Boot-AppApplication<app>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "com.ai.rag.app.AppApplication",
+            "projectName": "app",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}
