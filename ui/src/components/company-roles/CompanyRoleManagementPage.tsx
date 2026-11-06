@@ -33,6 +33,15 @@ interface EmployeeRoleDraft {
   roleIds: number[];
 }
 
+type CrudPermission = "canCreate" | "canRead" | "canUpdate" | "canDelete";
+
+const CRUD_PERMISSION_LABELS: Record<CrudPermission, "create" | "read" | "update" | "delete"> = {
+  canCreate: "create",
+  canRead: "read",
+  canUpdate: "update",
+  canDelete: "delete",
+};
+
 const EMPLOYEES_PER_PAGE = 10;
 const EMPLOYEE_PAGE_SIZES = [10, 25, 50, 100] as const;
 
@@ -265,7 +274,7 @@ export default function CompanyRoleManagementPage() {
 
   function updateCrudAccessDraft(
     resourceKey: string,
-    permission: "canCreate" | "canRead" | "canUpdate" | "canDelete",
+    permission: CrudPermission,
     allowed: boolean,
   ) {
     setCrudAccessRows((current) =>
@@ -880,7 +889,7 @@ export default function CompanyRoleManagementPage() {
                                             type="checkbox"
                                             checked={allowed}
                                             disabled={savingCrudResourceKey !== null}
-                                            aria-label={`${access.resourceKey}: ${t(permission)}`}
+                                            aria-label={`${access.resourceKey}: ${t(CRUD_PERMISSION_LABELS[permission])}`}
                                             onChange={(event) =>
                                               updateCrudAccessDraft(
                                                 access.resourceKey,
