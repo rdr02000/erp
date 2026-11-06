@@ -1,0 +1,15 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Spring Boot: Compile & Package",
+      "type": "shell",
+      "command": "./mvnw clean package -DskipTests",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$eslint-compact"]
+    }
+  ]
+}

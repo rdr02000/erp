@@ -7,119 +7,126 @@ import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSidebar } from "../context/SidebarContext";
 import {
-  BoxCubeIcon,
-  CalenderIcon,
   ChevronDownIcon,
   GridIcon,
   HorizontaLDots,
-  ListIcon,
+  UserCircleIcon,
+  CalenderIcon,
   PencilIcon,
+  ListIcon,
+  TableIcon,
   PageIcon,
   PieChartIcon,
+  BoxCubeIcon,
   PlugInIcon,
-  TableIcon,
-  UserCircleIcon,
 } from "../icons/index";
 import SidebarWidget from "./SidebarWidget";
 import { fetchCurrentUser } from "@/components/auth/authApi";
 import { fetchUserProfile } from "@/components/user-profile/userProfileApi";
+import { fetchCompanyRoleAccess } from "@/components/company-roles/companyRoleApi";
+import { fetchMenuItems, type MenuItem } from "@/components/menu/menuApi";
 
 type NavItem = {
   key: string;
+  label: string;
   icon: React.ReactNode;
   path?: string;
-  new?: boolean;
-  target?: string;
   subItems?: {
     key: string;
+    label: string;
     path: string;
-    pro?: boolean;
-    new?: boolean;
-    target?: string;
   }[];
 };
 
-const navItems: NavItem[] = [
-  {
-    icon: <GridIcon />,
-    key: "dashboard",
-    subItems: [{ key: "ecommerceHome", path: "/" }],
-  },
-  {
-    icon: <CalenderIcon />,
-    key: "calendar",
-    path: "/calendar",
-  },
-  {
-    icon: <PencilIcon />,
-    key: "practice",
-    path: "/use-state",
-  },
-  {
-    icon: <UserCircleIcon />,
-    key: "userProfile",
-    path: "/profile",
-  },
-  {
-    key: "forms",
-    icon: <ListIcon />,
-    subItems: [{ key: "formElements", path: "/form-elements", pro: false }],
-  },
-  {
-    key: "tables",
-    icon: <TableIcon />,
-    subItems: [{ key: "basicTables", path: "/basic-tables", pro: false }],
-  },
-  {
-    key: "pages",
-    icon: <PageIcon />,
-    subItems: [
-      { key: "blankPage", path: "/blank" },
-      { key: "error404", path: "/error-404" },
-    ],
-  },
-];
+const menuIcons: Record<string, React.ReactNode> = {
+  dashboard: <GridIcon />,
+  calendar: <CalenderIcon />,
+  practice: <PencilIcon />,
+  userprofile: <UserCircleIcon />,
+  users: <UserCircleIcon />,
+  forms: <ListIcon />,
+  tables: <TableIcon />,
+  pages: <PageIcon />,
+  chart: <PieChartIcon />,
+  reports: <PieChartIcon />,
+  building: <BoxCubeIcon />,
+  receipt: <ListIcon />,
+  settings: <PlugInIcon />,
+};
 
-const othersItems: NavItem[] = [
-  {
-    icon: <PieChartIcon />,
-    key: "charts",
-    subItems: [
-      { key: "lineChart", path: "/line-chart", pro: false },
-      { key: "barChart", path: "/bar-chart", pro: false },
-    ],
-  },
-  {
-    icon: <BoxCubeIcon />,
-    key: "uiElements",
-    subItems: [
-      { key: "alerts", path: "/alerts" },
-      { key: "avatar", path: "/avatars" },
-      { key: "badge", path: "/badge" },
-      { key: "buttons", path: "/buttons" },
-      { key: "images", path: "/images" },
-      { key: "videos", path: "/videos" },
-    ],
-  },
-  {
-    icon: <PlugInIcon />,
-    key: "authentication",
-    subItems: [
-      { key: "signIn", path: "/signin", pro: false },
-      { key: "signUp", path: "/signup", pro: false },
-    ],
-  },
-];
+function buildNavigation(items: MenuItem[]): NavItem[] {
+  const itemIds = new Set(items.map((item) => item.menuItemId));
+  const childrenByParent = new Map<number, MenuItem[]>();
+
+  items.forEach((item) => {
+    if (item.parentMenuItemId === null || !itemIds.has(item.parentMenuItemId)) {
+      return;
+    }
+    const children = childrenByParent.get(item.parentMenuItemId) ?? [];
+    children.push(item);
+    childrenByParent.set(item.parentMenuItemId, children);
+  });
+
+  return items
+    .filter(
+      (item) =>
+        item.parentMenuItemId === null ||
+        !itemIds.has(item.parentMenuItemId),
+    )
+    .sort(
+      (first, second) =>
+        first.sortOrder - second.sortOrder ||
+        first.menuKey.localeCompare(second.menuKey),
+    )
+    .map((item) => {
+      const childItems = (childrenByParent.get(item.menuItemId) ?? [])
+        .sort(
+          (first, second) =>
+            first.sortOrder - second.sortOrder ||
+            first.menuKey.localeCompare(second.menuKey),
+        )
+        .flatMap((child) =>
+          child.route
+            ? [
+                {
+                  key: child.menuKey,
+                  label: child.label,
+                  path: child.route,
+                },
+              ]
+            : [],
+        );
+      const subItems = item.route
+        ? [
+            { key: item.menuKey, label: item.label, path: item.route },
+            ...childItems,
+          ]
+        : childItems;
+
+      return {
+        key: item.menuKey,
+        label: item.label,
+        icon: menuIcons[item.iconKey?.toLowerCase() ?? ""] ?? <GridIcon />,
+        ...(item.route ? { path: item.route } : {}),
+        ...(subItems.length > 0 ? { subItems } : {}),
+      };
+    })
+    .filter((item) => item.path || item.subItems);
+}
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const pathname = usePathname();
   const t = useTranslations("sidebar");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [navItems, setNavItems] = useState<NavItem[]>([]);
+  const [menuLoading, setMenuLoading] = useState(true);
+  const [menuError, setMenuError] = useState<string | null>(null);
+  const pathnameRef = useRef(pathname);
 
   const renderMenuItems = (
     navItems: NavItem[],
-    menuType: "main" | "support" | "others",
+    menuType: "main",
   ) => (
     <ul className="flex flex-col gap-1">
       {navItems.map((nav, index) => (
@@ -147,21 +154,7 @@ const AppSidebar: React.FC = () => {
                 {nav.icon}
               </span>
               {(isExpanded || isHovered || isMobileOpen) && (
-                <span className="menu-item-text">{t(`items.${nav.key}`)}</span>
-              )}
-              {nav.new && (isExpanded || isHovered || isMobileOpen) && (
-                <span
-                  className={cn(
-                    "inset-e-10 absolute ms-auto",
-                    openSubmenu?.type === menuType &&
-                      openSubmenu?.index === index
-                      ? "menu-dropdown-badge-active"
-                      : "menu-dropdown-badge-inactive",
-                    "menu-dropdown-badge",
-                  )}
-                >
-                  {t("badges.new")}
-                </span>
+                <span className="menu-item-text">{nav.label}</span>
               )}
               {(isExpanded || isHovered || isMobileOpen) && (
                 <ChevronDownIcon
@@ -179,7 +172,6 @@ const AppSidebar: React.FC = () => {
             nav.path && (
               <Link
                 href={nav.path}
-                target={nav.target}
                 className={cn(
                   "group menu-item",
                   isActive(nav.path)
@@ -197,9 +189,7 @@ const AppSidebar: React.FC = () => {
                   {nav.icon}
                 </span>
                 {(isExpanded || isHovered || isMobileOpen) && (
-                  <span className="menu-item-text">
-                    {t(`items.${nav.key}`)}
-                  </span>
+                  <span className="menu-item-text">{nav.label}</span>
                 )}
               </Link>
             )
@@ -222,38 +212,13 @@ const AppSidebar: React.FC = () => {
                   <li key={subItem.key}>
                     <Link
                       href={subItem.path}
-                      target={subItem.target}
                       className={`menu-dropdown-item ${
                         isActive(subItem.path)
                           ? "menu-dropdown-item-active"
                           : "menu-dropdown-item-inactive"
                       }`}
                     >
-                      {t(`items.${subItem.key}`)}
-                      <span className="ms-auto flex items-center gap-1">
-                        {subItem.new && (
-                          <span
-                            className={`ms-auto ${
-                              isActive(subItem.path)
-                                ? "menu-dropdown-badge-active"
-                                : "menu-dropdown-badge-inactive"
-                            } menu-dropdown-badge`}
-                          >
-                            {t("badges.new")}
-                          </span>
-                        )}
-                        {subItem.pro && (
-                          <span
-                            className={`ms-auto ${
-                              isActive(subItem.path)
-                                ? "menu-dropdown-badge-pro-active"
-                                : "menu-dropdown-badge-pro-inactive"
-                            } menu-dropdown-badge-pro`}
-                          >
-                            {t("badges.pro")}
-                          </span>
-                        )}
-                      </span>
+                      {subItem.label}
                     </Link>
                   </li>
                 ))}
@@ -266,7 +231,7 @@ const AppSidebar: React.FC = () => {
   );
 
   const [openSubmenu, setOpenSubmenu] = useState<{
-    type: "main" | "support" | "others";
+    type: "main";
     index: number;
   } | null>(null);
   const [subMenuHeight, setSubMenuHeight] = useState<Record<string, number>>(
@@ -274,35 +239,11 @@ const AppSidebar: React.FC = () => {
   );
   const subMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  // const isActive = (path: string) => path === pathname;
-
   const isActive = useCallback((path: string) => path === pathname, [pathname]);
 
   useEffect(() => {
-    // Check if the current path matches any submenu item
-    let submenuMatched = false;
-    ["main", "support", "others"].forEach((menuType) => {
-      const items = menuType === "main" ? navItems : othersItems;
-      items.forEach((nav, index) => {
-        if (nav.subItems) {
-          nav.subItems.forEach((subItem) => {
-            if (isActive(subItem.path)) {
-              setOpenSubmenu({
-                type: menuType as "main" | "support" | "others",
-                index,
-              });
-              submenuMatched = true;
-            }
-          });
-        }
-      });
-    });
-
-    // If no submenu item matches, close the open submenu
-    if (!submenuMatched) {
-      setOpenSubmenu(null);
-    }
-  }, [pathname, isActive]);
+    pathnameRef.current = pathname;
+  }, [pathname]);
 
   useEffect(() => {
     // Set the height of the submenu items when the submenu is opened
@@ -317,32 +258,66 @@ const AppSidebar: React.FC = () => {
     }
   }, [openSubmenu]);
 
-   useEffect(() => {
-        let active = true;
-    
-        fetchCurrentUser()
-          .then((user) => fetchUserProfile(user.id))
-          .then((profile) => {
-            if (active) {
-              setAvatarUrl(profile?.company?.logoUrl || null);
-            
-            }
-          })
-          .catch(() => {
-            if (active) {
-              setAvatarUrl(null);
-            
-            }
-          });
-    
-        return () => {
-          active = false;
-        };
-      }, []);
+  useEffect(() => {
+    let active = true;
+
+    Promise.all([fetchMenuItems(), fetchCompanyRoleAccess()])
+      .then(([items, canManageCompanyRoles]) => {
+        if (active) {
+          const navigation = buildNavigation(items);
+          if (canManageCompanyRoles) {
+            navigation.push({
+              key: "company-roles",
+              label: t("items.companyRoles"),
+              icon: <UserCircleIcon />,
+              path: "/company/roles",
+            });
+          }
+          setNavItems(navigation);
+          const activeIndex = navigation.findIndex((nav) =>
+            nav.subItems?.some((subItem) => subItem.path === pathnameRef.current),
+          );
+          if (activeIndex >= 0) {
+            setOpenSubmenu({ type: "main", index: activeIndex });
+          }
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setMenuError(
+            error instanceof Error ? error.message : t("menuLoadFailed"),
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setMenuLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [t]);
+
+  useEffect(() => {
+    let active = true;
+
+    fetchCurrentUser()
+      .then((user) => fetchUserProfile(user.id))
+      .then((profile) => {
+        if (active) setAvatarUrl(profile?.company?.logoUrl || null);
+      })
+      .catch(() => {
+        if (active) setAvatarUrl(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleSubmenuToggle = (
     index: number,
-    menuType: "main" | "support" | "others",
+    menuType: "main",
   ) => {
     setOpenSubmenu((prevOpenSubmenu) => {
       if (
@@ -424,24 +399,19 @@ const AppSidebar: React.FC = () => {
                   <HorizontaLDots />
                 )}
               </h2>
-              {renderMenuItems(navItems, "main")}
-            </div>
-
-            <div>
-              <h2
-                className={`mb-4 flex text-xs leading-5 text-gray-400 uppercase ${
-                  !isExpanded && !isHovered
-                    ? "xl:justify-center"
-                    : "justify-start"
-                }`}
-              >
-                {isExpanded || isHovered || isMobileOpen ? (
-                  t("groups.others")
-                ) : (
-                  <HorizontaLDots />
-                )}
-              </h2>
-              {renderMenuItems(othersItems, "others")}
+              {menuLoading ? (
+                <p className="px-3 text-sm text-gray-500">{t("menuLoading")}</p>
+              ) : menuError ? (
+                <p className="px-3 text-sm text-red-500" role="alert">
+                  {menuError}
+                </p>
+              ) : navItems.length > 0 ? (
+                renderMenuItems(navItems, "main")
+              ) : (
+                <p className="px-3 text-sm text-gray-500">
+                  {t("noMenuItems")}
+                </p>
+              )}
             </div>
           </div>
         </nav>
@@ -452,7 +422,3 @@ const AppSidebar: React.FC = () => {
 };
 
 export default AppSidebar;
-function setAvatarUrl(arg0: string | null) {
-  throw new Error("Function not implemented.");
-}
-

@@ -24,7 +24,7 @@
             "mainClass": "com.ai.rag.app.AppApplication",
             "projectName": "app",
             "args": "",
-            "envFile": "${workspaceFolder}/.env"
+            "envFile": "${workspaceFolder}/app/.env"
         }
     ]
 }

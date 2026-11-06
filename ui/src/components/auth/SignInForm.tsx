@@ -8,7 +8,8 @@ import { useRouter } from "@/i18n/navigation";
 import { EyeCloseIcon, EyeIcon } from "@/icons";
 import { useTranslations } from "next-intl";
 import { type FormEvent, useState } from "react";
-import { signIn } from "./authApi";
+import { signIn, verifyTwoFactorLogin } from "./authApi";
+import type { LoginLocation } from "./authApi";
 
 export default function SignInForm() {
   const t = useTranslations("auth");
@@ -19,15 +20,34 @@ export default function SignInForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [challengeToken, setChallengeToken] = useState<string | null>(null);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [loginLocation, setLoginLocation] = useState<LoginLocation | null>(
+    null,
+  );
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsSubmitting(true);
     setError(null);
     try {
-      const location = includeLocation ? await getBrowserLocation() : null;
-      await signIn(email, password, location);
-      router.replace("/profile");
+      if (challengeToken) {
+        await verifyTwoFactorLogin(
+          challengeToken,
+          twoFactorCode,
+          loginLocation,
+        );
+        router.replace("/profile");
+      } else {
+        const location = includeLocation ? await getBrowserLocation() : null;
+        const result = await signIn(email, password, location);
+        if (result.requiresTwoFactor) {
+          setChallengeToken(result.challengeToken);
+          setLoginLocation(location);
+        } else {
+          router.replace("/profile");
+        }
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("signInFailed"));
     } finally {
@@ -48,58 +68,102 @@ export default function SignInForm() {
         </div>
         <form onSubmit={handleSubmit}>
           <div className="space-y-6">
-            <div>
-              <Label htmlFor="signin-email">
-                {t("email")} <span className="text-error-500">*</span>
-              </Label>
-              <Input
-                id="signin-email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder={t("emailPlaceholder")}
-              />
-            </div>
-            <div>
-              <Label htmlFor="signin-password">
-                {t("password")} <span className="text-error-500">*</span>
-              </Label>
-              <div className="relative">
-                <Input
-                  id="signin-password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder={t("passwordPlaceholder")}
-                />
+            {challengeToken ? (
+              <>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {t("twoFactorPrompt")}
+                </p>
+                <div>
+                  <Label htmlFor="signin-two-factor-code">
+                    {t("authenticatorCode")}
+                  </Label>
+                  <Input
+                    id="signin-two-factor-code"
+                    name="code"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    required
+                    value={twoFactorCode}
+                    onChange={(event) =>
+                      setTwoFactorCode(event.target.value.replace(/\D/g, ""))
+                    }
+                    placeholder={t("authenticatorCodePlaceholder")}
+                  />
+                </div>
                 <button
                   type="button"
-                  onClick={() => setShowPassword((visible) => !visible)}
-                  aria-label={showPassword ? t("hidePassword") : t("showPassword")}
-                  className="inset-e-4 absolute top-1/2 z-30 -translate-y-1/2"
+                  className="text-sm font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400"
+                  onClick={() => {
+                    setChallengeToken(null);
+                    setTwoFactorCode("");
+                    setLoginLocation(null);
+                    setError(null);
+                  }}
                 >
-                  {showPassword ? (
-                    <EyeIcon className="fill-gray-500 dark:fill-gray-400" />
-                  ) : (
-                    <EyeCloseIcon className="fill-gray-500 dark:fill-gray-400" />
-                  )}
+                  {t("backToSignIn")}
                 </button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Checkbox
-                id="signin-include-location"
-                checked={includeLocation}
-                onChange={setIncludeLocation}
-                label={t("includeLoginLocation")}
-              />
-            </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <Label htmlFor="signin-email">
+                    {t("email")} <span className="text-error-500">*</span>
+                  </Label>
+                  <Input
+                    id="signin-email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder={t("emailPlaceholder")}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="signin-password">
+                    {t("password")} <span className="text-error-500">*</span>
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="signin-password"
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="current-password"
+                      required
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder={t("passwordPlaceholder")}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((visible) => !visible)}
+                      aria-label={
+                        showPassword ? t("hidePassword") : t("showPassword")
+                      }
+                      className="absolute inset-e-4 top-1/2 z-30 -translate-y-1/2"
+                    >
+                      {showPassword ? (
+                        <EyeIcon className="fill-gray-500 dark:fill-gray-400" />
+                      ) : (
+                        <EyeCloseIcon className="fill-gray-500 dark:fill-gray-400" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Checkbox
+                    id="signin-include-location"
+                    checked={includeLocation}
+                    onChange={setIncludeLocation}
+                    label={t("includeLoginLocation")}
+                  />
+                </div>
+              </>
+            )}
             {error && (
               <p
                 role="alert"
@@ -114,7 +178,9 @@ export default function SignInForm() {
               type="submit"
               disabled={isSubmitting}
             >
-              {isSubmitting ? t("signingIn") : t("signIn")}
+              {isSubmitting
+                ? t(challengeToken ? "verifyingCode" : "signingIn")
+                : t(challengeToken ? "verifyCode" : "signIn")}
             </Button>
           </div>
         </form>
@@ -139,7 +205,7 @@ function getBrowserLocation(): Promise<{
           accuracyMeters: coords.accuracy,
         }),
       () => resolve(null),
-        { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 },
+      { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 },
     );
   });
 }

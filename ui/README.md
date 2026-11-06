@@ -85,9 +85,11 @@ with secure cookies.
 
 The local demo records in
 `../backend/app/src/main/resources/seed_user_profiles.sql` can sign in with their
-profile email (`demo_user_01@example.test` through `demo_user_05@example.test`)
-and the development-only password `password`. Run the seed SQL against the ERP
-database first; the application does not execute SQL seed scripts automatically.
+profile email (`demo_user_01@example.test` through `demo_user_05@example.test`, or
+`demo_employee_001@example.test` through `demo_employee_100@example.test`) and the
+development-only password `password`. The employee samples are distributed across the
+five demo companies and have the Employee role for ERP Core. Run the seed SQL against
+the ERP database first; the application does not execute SQL seed scripts automatically.
 Do not use the seeded credentials outside local development.
 
 ## Components
