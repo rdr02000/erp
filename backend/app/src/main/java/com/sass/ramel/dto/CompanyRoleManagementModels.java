@@ -53,4 +53,25 @@ public final class CompanyRoleManagementModels {
 
     public record UpdateEmployeeRolesRequest(boolean hasProductAccess, List<Long> roleIds) {
     }
+
+    public record CreateCompanyRoleRequest(String roleKey, String name) {
+    }
+
+    public record UserProductAccessView(
+            long subscriptionId,
+            String companyName,
+            String productCode,
+            String productName,
+            List<String> roles,
+            List<UserResourcePermissionView> permissions) {
+    }
+
+    public record UserResourcePermissionView(
+            String resourceKey,
+            boolean canCreate,
+            boolean canRead,
+            boolean canUpdate,
+            boolean canDelete,
+            boolean hasOverride) {
+    }
 }

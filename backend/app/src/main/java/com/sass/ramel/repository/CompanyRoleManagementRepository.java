@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public interface CompanyRoleManagementRepository
         extends ListCrudRepository<CompanyEmployee, Long> {
@@ -130,6 +131,106 @@ public interface CompanyRoleManagementRepository
             """, nativeQuery = true)
     List<RoleProjection> findRoleProjections(
             @Param("subscriptionIds") List<Long> subscriptionIds);
+
+    @Query(value = """
+            SELECT
+                subscription.id AS "subscriptionId",
+                company.name AS "companyName",
+                product.product_code AS "productCode",
+                product.name AS "productName",
+                role.name AS "roleName"
+            FROM company_employees AS employee
+            JOIN company_employee_product_access AS access
+                ON access.employee_id = employee.employee_id
+            JOIN company_product_subscriptions AS subscription
+                ON subscription.id = access.company_product_subscription_id
+            JOIN companies AS company
+                ON company.company_id = subscription.company_id
+            JOIN products AS product
+                ON product.product_id = subscription.product_id
+            LEFT JOIN company_employee_roles AS employee_role
+                ON employee_role.employee_id = access.employee_id
+               AND employee_role.company_product_subscription_id =
+                   access.company_product_subscription_id
+            LEFT JOIN company_subscription_roles AS role
+                ON role.role_id = employee_role.role_id
+               AND role.company_product_subscription_id =
+                   employee_role.company_product_subscription_id
+            WHERE employee.user_id = :userId
+              AND employee.status = 'ACTIVE'
+              AND subscription.status = 'ACTIVE'
+              AND subscription.subscribed_at <= CURRENT_TIMESTAMP
+              AND (subscription.expires_at IS NULL
+                   OR subscription.expires_at > CURRENT_TIMESTAMP)
+              AND product.is_active
+            ORDER BY company.name, product.name, role.name
+            """, nativeQuery = true)
+    List<UserProductRoleProjection> findUserProductRoles(@Param("userId") long userId);
+
+    @Query(value = """
+            SELECT
+                subscription.id AS "subscriptionId",
+                permissions.resource_key AS "resourceKey",
+                permissions.can_create AS "canCreate",
+                permissions.can_read AS "canRead",
+                permissions.can_update AS "canUpdate",
+                permissions.can_delete AS "canDelete",
+                permissions.has_override AS "hasOverride"
+            FROM company_employees AS employee
+            JOIN company_employee_product_access AS access
+                ON access.employee_id = employee.employee_id
+            JOIN company_product_subscriptions AS subscription
+                ON subscription.id = access.company_product_subscription_id
+            JOIN products AS product
+                ON product.product_id = subscription.product_id
+            JOIN company_employee_product_permissions AS permissions
+                ON permissions.employee_id = access.employee_id
+               AND permissions.company_product_subscription_id =
+                   access.company_product_subscription_id
+            WHERE employee.user_id = :userId
+              AND employee.status = 'ACTIVE'
+              AND subscription.status = 'ACTIVE'
+              AND subscription.subscribed_at <= CURRENT_TIMESTAMP
+              AND (subscription.expires_at IS NULL
+                   OR subscription.expires_at > CURRENT_TIMESTAMP)
+              AND product.is_active
+            ORDER BY subscription.id, permissions.resource_key
+            """, nativeQuery = true)
+    List<UserProductPermissionProjection> findUserProductPermissions(
+            @Param("userId") long userId);
+
+    @Modifying
+    @Query(value = """
+            INSERT INTO company_subscription_roles (
+                company_product_subscription_id,
+                role_key,
+                name
+            )
+            VALUES (
+                :subscriptionId,
+                :roleKey,
+                :name
+            )
+            ON CONFLICT (company_product_subscription_id, role_key) DO NOTHING
+            """, nativeQuery = true)
+    int insertCompanyRole(
+            @Param("subscriptionId") long subscriptionId,
+            @Param("roleKey") String roleKey,
+            @Param("name") String name);
+
+    @Query(value = """
+            SELECT
+                role.company_product_subscription_id AS "subscriptionId",
+                role.role_id AS "roleId",
+                role.role_key AS "roleKey",
+                role.name AS "name"
+            FROM company_subscription_roles AS role
+            WHERE role.company_product_subscription_id = :subscriptionId
+              AND role.role_key = :roleKey
+            """, nativeQuery = true)
+    Optional<RoleProjection> findRoleBySubscriptionAndKey(
+            @Param("subscriptionId") long subscriptionId,
+            @Param("roleKey") String roleKey);
 
     @Query(value = """
             SELECT
@@ -457,6 +558,34 @@ public interface CompanyRoleManagementRepository
         String getRoleKey();
 
         String getName();
+    }
+
+    interface UserProductRoleProjection {
+        long getSubscriptionId();
+
+        String getCompanyName();
+
+        String getProductCode();
+
+        String getProductName();
+
+        String getRoleName();
+    }
+
+    interface UserProductPermissionProjection {
+        long getSubscriptionId();
+
+        String getResourceKey();
+
+        boolean isCanCreate();
+
+        boolean isCanRead();
+
+        boolean isCanUpdate();
+
+        boolean isCanDelete();
+
+        boolean isHasOverride();
     }
 
     interface EmployeeRoleProjection {

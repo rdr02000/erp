@@ -52,6 +52,24 @@ export interface UserProfileInput {
   company: CompanyDetailsInput | null;
 }
 
+export interface UserProductAccess {
+  subscriptionId: number;
+  companyName: string;
+  productCode: string;
+  productName: string;
+  roles: string[];
+  permissions: UserResourcePermission[];
+}
+
+export interface UserResourcePermission {
+  resourceKey: string;
+  canCreate: boolean;
+  canRead: boolean;
+  canUpdate: boolean;
+  canDelete: boolean;
+  hasOverride: boolean;
+}
+
 export function toCompanyDetailsInput(
   company: CompanyDetails | null | undefined,
 ): CompanyDetailsInput {
@@ -95,6 +113,14 @@ export async function fetchUserProfile(
     throw await getResponseError(response);
   }
   return response.json() as Promise<UserProfile>;
+}
+
+export async function fetchUserProductAccess(): Promise<UserProductAccess[]> {
+  const response = await sessionFetch("/api/company/role-management/my-access");
+  if (!response.ok) {
+    throw await getResponseError(response);
+  }
+  return response.json() as Promise<UserProductAccess[]>;
 }
 
 export async function saveUserProfile(

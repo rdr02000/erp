@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  createCompanyRole,
   fetchEmployeeCrudAccess,
   fetchCompanyRoleManagement,
   resetEmployeeCrudAccess,
@@ -26,6 +27,18 @@ function employeeName(
   lastName: string | null,
 ): string {
   return [firstName, lastName].filter(Boolean).join(" ");
+}
+
+function roleKeyFromName(name: string): string {
+  const key = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 100);
+  return key && !/^[a-z]/.test(key)
+    ? `role_${key}`.slice(0, 100)
+    : key;
 }
 
 interface EmployeeRoleDraft {
@@ -78,6 +91,13 @@ export default function CompanyRoleManagementPage() {
   const [forbidden, setForbidden] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedRoleKey, setSavedRoleKey] = useState<string | null>(null);
+  const [createRoleOpen, setCreateRoleOpen] = useState(false);
+  const [createRoleName, setCreateRoleName] = useState("");
+  const [createRoleKey, setCreateRoleKey] = useState("");
+  const [createRoleKeyEdited, setCreateRoleKeyEdited] = useState(false);
+  const [createRoleSaving, setCreateRoleSaving] = useState(false);
+  const [createRoleError, setCreateRoleError] = useState<string | null>(null);
+  const [roleCreated, setRoleCreated] = useState(false);
   const [crudAccessTarget, setCrudAccessTarget] = useState<{
     subscription: CompanySubscriptionRoles;
     employee: CompanySubscriptionRoles["employees"][number];
@@ -185,6 +205,48 @@ export default function CompanyRoleManagementPage() {
     }));
     setSaveError(null);
     setSavedRoleKey(null);
+  }
+
+  function openCreateRoleDialog() {
+    setCreateRoleName("");
+    setCreateRoleKey("");
+    setCreateRoleKeyEdited(false);
+    setCreateRoleError(null);
+    setRoleCreated(false);
+    setCreateRoleOpen(true);
+  }
+
+  async function handleCreateRole() {
+    if (!selectedSubscription) return;
+    setCreateRoleSaving(true);
+    setCreateRoleError(null);
+    try {
+      const role = await createCompanyRole(
+        selectedSubscription.subscriptionId,
+        createRoleKey.trim(),
+        createRoleName.trim(),
+      );
+      setSubscriptions((current) =>
+        current.map((subscription) =>
+          subscription.subscriptionId !== selectedSubscription.subscriptionId
+            ? subscription
+            : {
+                ...subscription,
+                roles: [...subscription.roles, role].sort((left, right) =>
+                  left.name.localeCompare(right.name),
+                ),
+              },
+        ),
+      );
+      setCreateRoleOpen(false);
+      setRoleCreated(true);
+    } catch (cause: unknown) {
+      setCreateRoleError(
+        cause instanceof Error ? cause.message : t("createRoleFailed"),
+      );
+    } finally {
+      setCreateRoleSaving(false);
+    }
   }
 
   async function handleSave(
@@ -425,6 +487,7 @@ export default function CompanyRoleManagementPage() {
                 setSelectedSubscriptionId(Number(event.target.value));
                 setEmployeePage(1);
                 setEditingRolesEmployeeId(null);
+                setRoleCreated(false);
               }}
               className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:ring-3 focus:ring-brand-500/10 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
             >
@@ -441,15 +504,132 @@ export default function CompanyRoleManagementPage() {
 
           {selectedSubscription && (
             <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-              <div className="border-b border-gray-200 px-5 py-4 dark:border-gray-800">
-                <h2 className="font-semibold text-gray-900 dark:text-white">
-                  {selectedSubscription.companyName} -{" "}
-                  {selectedSubscription.productName}
-                </h2>
-                <p className="mt-1 text-xs text-gray-500">
-                  {selectedSubscription.productCode}
-                </p>
+              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-200 px-5 py-4 dark:border-gray-800">
+                <div>
+                  <h2 className="font-semibold text-gray-900 dark:text-white">
+                    {selectedSubscription.companyName} -{" "}
+                    {selectedSubscription.productName}
+                  </h2>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {selectedSubscription.productCode}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {roleCreated && (
+                    <p className="text-sm text-success-600" role="status">
+                      {t("createRoleSucceeded")}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={openCreateRoleDialog}
+                    className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+                  >
+                    {t("addRole")}
+                  </button>
+                </div>
               </div>
+
+              <Modal
+                isOpen={createRoleOpen}
+                onClose={() => setCreateRoleOpen(false)}
+                showCloseButton={false}
+                className="mx-4 max-w-xl p-6 sm:p-8"
+              >
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="create-company-role-title"
+                >
+                  <h2
+                    id="create-company-role-title"
+                    className="pr-10 text-lg font-semibold text-gray-900 dark:text-white"
+                  >
+                    {t("addRole")}
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    {selectedSubscription.companyName} -{" "}
+                    {selectedSubscription.productName}
+                  </p>
+                  <form
+                    className="mt-6 space-y-4"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void handleCreateRole();
+                    }}
+                  >
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {t("roleName")}
+                      </span>
+                      <input
+                        type="text"
+                        required
+                        maxLength={150}
+                        value={createRoleName}
+                        onChange={(event) => {
+                          const name = event.target.value;
+                          setCreateRoleName(name);
+                          if (!createRoleKeyEdited) {
+                            setCreateRoleKey(roleKeyFromName(name));
+                          }
+                        }}
+                        className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 focus:border-brand-300 focus:ring-3 focus:ring-brand-500/10 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {t("roleKey")}
+                      </span>
+                      <input
+                        type="text"
+                        required
+                        maxLength={100}
+                        pattern="[a-z][a-z0-9_]{0,99}"
+                        value={createRoleKey}
+                        onChange={(event) => {
+                          setCreateRoleKey(event.target.value);
+                          setCreateRoleKeyEdited(true);
+                        }}
+                        aria-describedby="create-company-role-key-help"
+                        className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 focus:border-brand-300 focus:ring-3 focus:ring-brand-500/10 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                      />
+                      <span
+                        id="create-company-role-key-help"
+                        className="mt-1 block text-xs text-gray-500 dark:text-gray-400"
+                      >
+                        {t("roleKeyHelp")}
+                      </span>
+                    </label>
+                    {createRoleError && (
+                      <p className="text-sm text-error-500" role="alert">
+                        {createRoleError}
+                      </p>
+                    )}
+                    <div className="flex justify-end gap-3 pt-2">
+                      <button
+                        type="button"
+                        disabled={createRoleSaving}
+                        onClick={() => setCreateRoleOpen(false)}
+                        className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/[0.03]"
+                      >
+                        {t("closeDialog")}
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={
+                          createRoleSaving ||
+                          createRoleName.trim().length === 0 ||
+                          createRoleKey.trim().length === 0
+                        }
+                        className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {createRoleSaving ? t("saving") : t("addRole")}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </Modal>
 
               {selectedSubscription.employees.length === 0 ? (
                 <p className="p-5 text-sm text-gray-500">{t("noEmployees")}</p>

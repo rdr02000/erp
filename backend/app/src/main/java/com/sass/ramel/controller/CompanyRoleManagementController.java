@@ -1,11 +1,13 @@
 package com.sass.ramel.controller;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -15,6 +17,9 @@ import com.sass.ramel.dto.CompanyRoleManagementModels.SubscriptionView;
 import com.sass.ramel.dto.CompanyRoleManagementModels.EmployeeCrudAccessView;
 import com.sass.ramel.dto.CompanyRoleManagementModels.UpdateEmployeeCrudAccessRequest;
 import com.sass.ramel.dto.CompanyRoleManagementModels.UpdateEmployeeRolesRequest;
+import com.sass.ramel.dto.CompanyRoleManagementModels.CreateCompanyRoleRequest;
+import com.sass.ramel.dto.CompanyRoleManagementModels.RoleOption;
+import com.sass.ramel.dto.CompanyRoleManagementModels.UserProductAccessView;
 import com.sass.ramel.security.AuthenticatedUser;
 import com.sass.ramel.service.CompanyRoleManagementService;
 
@@ -37,6 +42,22 @@ public class CompanyRoleManagementController {
     public List<SubscriptionView> getManagedSubscriptions(
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         return service.getManagedSubscriptions(currentUser.id());
+    }
+
+    @PostMapping("/subscriptions/{subscriptionId}/roles")
+    public ResponseEntity<RoleOption> createCompanyRole(
+            @PathVariable long subscriptionId,
+            @RequestBody CreateCompanyRoleRequest request,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        RoleOption role = service.createCompanyRole(
+                currentUser.id(), subscriptionId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(role);
+    }
+
+    @GetMapping("/my-access")
+    public List<UserProductAccessView> getMyProductAccess(
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        return service.getUserProductAccess(currentUser.id());
     }
 
     @GetMapping("/subscriptions/{subscriptionId}/employees/{employeeId}/permissions")

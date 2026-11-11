@@ -15,9 +15,13 @@ import com.sass.ramel.dto.CompanyRoleManagementModels.UpdateEmployeeCrudAccessRe
 import com.sass.ramel.dto.CompanyRoleManagementModels.RoleOption;
 import com.sass.ramel.dto.CompanyRoleManagementModels.SubscriptionView;
 import com.sass.ramel.dto.CompanyRoleManagementModels.UpdateEmployeeRolesRequest;
+import com.sass.ramel.dto.CompanyRoleManagementModels.CreateCompanyRoleRequest;
+import com.sass.ramel.dto.CompanyRoleManagementModels.UserProductAccessView;
+import com.sass.ramel.dto.CompanyRoleManagementModels.UserResourcePermissionView;
 import com.sass.ramel.repository.CompanyRoleManagementRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -61,6 +65,83 @@ class CompanyRoleManagementServiceTest {
         List<SubscriptionView> result = service.getManagedSubscriptions(15);
 
         assertThat(result).containsExactly(subscription);
+    }
+
+    @Test
+    void createsRoleForAnAuthorizedSubscription() {
+        var projection = mock(CompanyRoleManagementRepository.RoleProjection.class);
+        when(repository.hasAdministratorAccess(15, 21)).thenReturn(true);
+        when(repository.insertCompanyRole(21, "payroll_manager", "Payroll Manager"))
+                .thenReturn(1);
+        when(repository.findRoleBySubscriptionAndKey(21, "payroll_manager"))
+                .thenReturn(Optional.of(projection));
+        when(projection.getRoleId()).thenReturn(33L);
+        when(projection.getRoleKey()).thenReturn("payroll_manager");
+        when(projection.getName()).thenReturn("Payroll Manager");
+
+        RoleOption result = service.createCompanyRole(
+                15,
+                21,
+                new CreateCompanyRoleRequest("payroll_manager", " Payroll Manager "));
+
+        assertThat(result).isEqualTo(
+                new RoleOption(33, "payroll_manager", "Payroll Manager"));
+    }
+
+    @Test
+    void rejectsRoleCreationByANonAdministrator() {
+        when(repository.hasAdministratorAccess(15, 21)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.createCompanyRole(
+                15, 21, new CreateCompanyRoleRequest("payroll_manager", "Payroll Manager")))
+                .isInstanceOf(AccessDeniedException.class);
+        verify(repository).hasAdministratorAccess(15, 21);
+        verifyNoMoreInteractions(repository);
+    }
+
+    @Test
+    void rejectsDuplicateRoleKeysForASubscription() {
+        when(repository.hasAdministratorAccess(15, 21)).thenReturn(true);
+        when(repository.insertCompanyRole(21, "payroll_manager", "Payroll Manager"))
+                .thenReturn(0);
+
+        assertThatThrownBy(() -> service.createCompanyRole(
+                15, 21, new CreateCompanyRoleRequest("payroll_manager", "Payroll Manager")))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
+                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+    }
+
+    @Test
+    void returnsCurrentUserRolesAndEffectivePermissionsGroupedBySubscription() {
+        var role = mock(CompanyRoleManagementRepository.UserProductRoleProjection.class);
+        when(role.getSubscriptionId()).thenReturn(21L);
+        when(role.getCompanyName()).thenReturn("Northstar Robotics");
+        when(role.getProductCode()).thenReturn("ERP_CORE");
+        when(role.getProductName()).thenReturn("ERP Core");
+        when(role.getRoleName()).thenReturn("Payroll Manager");
+        when(repository.findUserProductRoles(15)).thenReturn(List.of(role));
+
+        var permission =
+                mock(CompanyRoleManagementRepository.UserProductPermissionProjection.class);
+        when(permission.getSubscriptionId()).thenReturn(21L);
+        when(permission.getResourceKey()).thenReturn("payroll");
+        when(permission.isCanCreate()).thenReturn(true);
+        when(permission.isCanRead()).thenReturn(true);
+        when(permission.isCanUpdate()).thenReturn(false);
+        when(permission.isCanDelete()).thenReturn(false);
+        when(permission.isHasOverride()).thenReturn(true);
+        when(repository.findUserProductPermissions(15)).thenReturn(List.of(permission));
+
+        List<UserProductAccessView> result = service.getUserProductAccess(15);
+
+        assertThat(result).containsExactly(new UserProductAccessView(
+                21,
+                "Northstar Robotics",
+                "ERP_CORE",
+                "ERP Core",
+                List.of("Payroll Manager"),
+                List.of(new UserResourcePermissionView(
+                        "payroll", true, true, false, false, true))));
     }
 
         @Test

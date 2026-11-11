@@ -129,3 +129,22 @@ export async function saveEmployeeRoles(
     throw await getResponseError(response);
   }
 }
+
+export async function createCompanyRole(
+  subscriptionId: number,
+  roleKey: string,
+  name: string,
+): Promise<CompanyRole> {
+  const response = await sessionFetch(
+    `/api/company/role-management/subscriptions/${subscriptionId}/roles`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roleKey, name }),
+    },
+  );
+  if (!response.ok) {
+    throw await getResponseError(response);
+  }
+  return response.json() as Promise<CompanyRole>;
+}
