@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 @Transactional(readOnly = true)
@@ -106,7 +107,8 @@ public class CompanyRoleManagementService {
         }
 
         return accessBySubscription.values().stream()
-                .map(UserProductAccessAccumulator::toView)
+                .map(access -> Objects.requireNonNull(
+                        access, "User product access accumulator must not be null").toView())
                 .toList();
     }
 
